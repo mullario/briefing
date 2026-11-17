@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 BERLIN = ZoneInfo("Europe/Berlin")
 LAT, LON = 49.44806, 8.23861  # Gönnheim, Landkreis Bad Dürkheim
-UA = "Mozilla/5.0 (compatible; meine-webseite-bot/1.0; +https://github.com/mullario/meine-webseite)"
+UA = "Mozilla/5.0 (compatible; briefing-bot/1.0; +https://github.com/mullario/briefing)"
 TARGET_TIMES = [(5, 45), (18, 0)]  # Berliner Ortszeit
 STATE_FILE = ".build-state.json"
 
@@ -313,7 +313,7 @@ def render_page(weather, news_cards_html: str, now: datetime) -> str:
     </div>
 {news_cards_html}
   </div>
-  <footer>Automatisch generiert täglich um 5:45 und 18 Uhr &middot; <a href="https://github.com/mullario/meine-webseite">Quellcode</a></footer>
+  <footer>Automatisch generiert täglich um 5:45 und 18 Uhr &middot; <a href="https://github.com/mullario/briefing">Quellcode</a></footer>
 </div>
 </body>
 </html>
