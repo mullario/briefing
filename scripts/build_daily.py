@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -86,19 +87,25 @@ SPORT_FEEDS = [
 SPORT_ITEMS_PER_FEED = 10  # Pool je Feed, aus dem nach Datum die Top-Meldungen gezogen werden
 
 
-def fetch(url: str, _redirects: int = 0) -> bytes:
+def fetch(url: str, _redirects: int = 0, attempts: int = 3) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.read()
-    except urllib.error.HTTPError as exc:
-        if exc.code in (301, 302, 303, 307, 308) and _redirects < 5:
-            location = exc.headers.get("Location")
-            if location:
-                if location.startswith("/"):
-                    location = re.match(r"https?://[^/]+", url).group(0) + location
-                return fetch(location, _redirects + 1)
-        raise
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code in (301, 302, 303, 307, 308) and _redirects < 5:
+                location = exc.headers.get("Location")
+                if location:
+                    if location.startswith("/"):
+                        location = re.match(r"https?://[^/]+", url).group(0) + location
+                    return fetch(location, _redirects + 1, attempts)
+            if exc.code < 500 or attempt == attempts:
+                raise
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt == attempts:
+                raise
+        time.sleep(3 * attempt)
 
 
 def get_weather():
@@ -198,6 +205,12 @@ def render_page(weather, news_cards_html: str, now: datetime) -> str:
     weekday = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][now.weekday()]
     date_str = f"{weekday}, {now.strftime('%d.%m.%Y')}"
     time_str = now.strftime("%H:%M")
+    if weather["tmin"] is None:
+        weather_main = weather["desc"]
+        weather_details = "Gönnheim · beim nächsten Update wieder aktuell"
+    else:
+        weather_main = f"{weather['desc']}, {weather['tmin']}° – {weather['tmax']}° in Gönnheim"
+        weather_details = f"Regenwahrscheinlichkeit {weather['precip']}% · Wind bis {weather['wind']} km/h"
     return f"""<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -294,8 +307,8 @@ def render_page(weather, news_cards_html: str, now: datetime) -> str:
     <div class="card weather-card">
       <div class="weather-emoji">{weather['emoji']}</div>
       <div>
-        <div class="weather-main">{weather['desc']}, {weather['tmin']}° – {weather['tmax']}° in Gönnheim</div>
-        <div class="weather-details">Regenwahrscheinlichkeit {weather['precip']}% · Wind bis {weather['wind']} km/h</div>
+        <div class="weather-main">{weather_main}</div>
+        <div class="weather-details">{weather_details}</div>
       </div>
     </div>
 {news_cards_html}
@@ -353,7 +366,11 @@ def main():
             print(f"Übersprungen: Ziel {target} für {today} wurde bereits gebaut.")
             sys.exit(0)
 
-    weather = get_weather()
+    try:
+        weather = get_weather()
+    except Exception as exc:  # Wetterausfall soll die Nachrichten nicht blockieren
+        print(f"Wetter nicht verfügbar: {exc}", file=sys.stderr)
+        weather = {"desc": "Wetterdaten derzeit nicht verfügbar", "emoji": "🌡️", "tmin": None, "tmax": None, "precip": None, "wind": None}
     cards = []
     for name in ["Deutschland", "Region Bad Dürkheim", "Welt", "Wirtschaft"]:
         headlines = get_category_headlines(NEWS_SOURCES[name])
